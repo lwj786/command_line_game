@@ -4,7 +4,9 @@
  */
 
 #include <stdio.h>
-#define GAMES_NUM 0
+#include "game.h"
+
+#define GAMES_NUM 1
 
 struct
 argument_struct{
@@ -18,6 +20,8 @@ int help(int argc, char *argv[])
     printf("用法：[command] {option} 或 [command] [game name] {option}\n");
     printf("主函数参数：\n");
     printf("\t -h, --help 用法帮助\n");
+    printf("游戏：mine 扫雷\n");
+    printf("使用[command] [game name] --help | -h 查看帮助\n");
 
     return 0;
 }
@@ -48,6 +52,7 @@ int main(int argc, char *argv[])
 {
     struct argument_struct arg[GAMES_NUM + 2] = {
         {"-h", &help}, {"--help", &help}
+        {"mine", &mine_main}
     };
     int i, count;
 
