@@ -4,6 +4,8 @@
  */
 
 #include <stdio.h>
+
+#include "str.h"
 #include "game.h"
 
 #define GAMES_NUM 1
@@ -26,32 +28,10 @@ int help(int argc, char *argv[])
     return 0;
 }
 
-/* 字符部分比对
- * parameter: str 需比较的字符串部分（的起始位置）, cmp 比对项
- * return: rt true 1 or flase 0
- */
-int parts_cmp(char *str, char *cmp)
-{
-    int i = 0,rt = 0;
-
-    for (;; ++i) {
-        if (cmp[i] == 0)    //能执行到cmp结束，说明之前都相同
-            break;
-        else if (str[i] == cmp[i])
-            rt = 1;
-        else
-            rt = 0;
-
-        if (rt == 0) break;
-    }
-
-    return rt;
-}
-
 int main(int argc, char *argv[])
 {
     struct argument_struct arg[GAMES_NUM + 2] = {
-        {"-h", &help}, {"--help", &help}
+        {"-h", &help}, {"--help", &help},
         {"mine", &mine_main}
     };
     int i, count;
