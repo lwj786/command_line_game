@@ -6,11 +6,14 @@
 #ifndef _STR_H_
 #define _STR_H_
 
-/* 字符部分比对
- * parameter: str 需比较的字符串部分（的起始位置）, cmp 比对项
- * return: rt true 1 or flase 0
- */
+/* 获取字符长度*/
+int get_str_len(char *str);
+
+/* 字符部分比对*/
 int parts_cmp(char *str, char *cmp);
+
+/* 字符串比较*/
+int cmp_str(char *source, char *target);
 
 /* 字符转数字函数*/
 double str2num(char *str);

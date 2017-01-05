@@ -3,26 +3,36 @@
  * 日期：2016年 11月 27日 星期日 14:26:00 CST
  */
 
-/* 字符部分比对
- * parameter: str 需比较的字符串部分（的起始位置）, cmp 比对项
- * return: rt true 1 or flase 0
- */
-int parts_cmp(char *str, char *cmp)
+/* 获取字符长度*/
+int get_str_len(char *str)
 {
-    int i = 0,rt = 0;
+    int length = 0;
 
-    for (;; ++i) {
-        if (cmp[i] == 0)    //能执行到cmp结束，说明之前都相同
-            break;
-        else if (str[i] == cmp[i])
-            rt = 1;
-        else
-            rt = 0;
+    for (; str[length] != 0; ++length)
+        ;
 
-        if (rt == 0) break;
-    }
+    return length;
+}
 
-    return rt;
+/* 字符串部分比对*/
+int parts_cmp(char *source, char *target)
+{
+    int i = 0;
+
+    for (; target[i] != 0; ++i)
+        if (source[i] != target[i]) return 0;
+
+    return 1;
+}
+
+/* 字符串比较*/
+int cmp_str(char *source, char *target)
+{
+    if (get_str_len(source) == get_str_len(target)
+        && parts_cmp(source, target))
+        return 1;
+
+    return 0;
 }
 
 #define _e 2.718281828

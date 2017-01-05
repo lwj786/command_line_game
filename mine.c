@@ -30,16 +30,21 @@ parameter_struct {
 /* 确认 默认为否*/
 int comfirm(char *hint)
 {
+    int c;
+
     printf("%s", hint);
-    if (getchar() == 'y') {
+    if ((c = getchar()) == 'y') {
         /* 清空缓冲区*/
         while (getchar() != '\n')
             ;
 
         return 1;
     } else {
-        while (getchar() != '\n')
-            ;
+        /* 输入为'\n'时不必清空缓冲区*/
+        if (c != '\n') {
+            while (getchar() != '\n')
+                ;
+        }
 
         return 0;
     }
@@ -50,7 +55,7 @@ void free_minefield(struct minefield_struct *p_minefield)
 {
     int i;
 
-    for (i = 0; i <= p_minefield->width; ++i)
+    for (i = 0; i < p_minefield->width; ++i)
         free(p_minefield->implicit[i]);
     free(p_minefield->explicit);
 
@@ -66,9 +71,9 @@ void allocate_minefield(struct minefield_struct *p_minefield)
 {
     int i;
 
-    p_minefield->explicit = (char **)malloc(sizeof(char *) * (p_minefield->width + 1));
-    for (i = 0; i <= p_minefield->width; ++i)
-        p_minefield->explicit[i] = (char *)malloc(sizeof(char) * (p_minefield->length + 1));
+    p_minefield->explicit = (char **)malloc(sizeof(char *) * p_minefield->width);
+    for (i = 0; i < p_minefield->width; ++i)
+        p_minefield->explicit[i] = (char *)malloc(sizeof(char) * p_minefield->length);
 
     p_minefield->implicit = (int **)malloc(sizeof(int *) * p_minefield->width);
     for (i = 0; i < p_minefield->width; ++i)
@@ -78,7 +83,7 @@ void allocate_minefield(struct minefield_struct *p_minefield)
 /* 由标准输入构造命令*/
 void structure_parameter(char *content_of_input, struct parameter_struct *p_parameter)
 {
-    int i;
+    int i, parameter_count;
 
     /* 参数计数 分配空间*/
     if (*content_of_input != ' ' && *content_of_input != 0) ++p_parameter->count;
@@ -91,11 +96,12 @@ void structure_parameter(char *content_of_input, struct parameter_struct *p_para
     p_parameter->vector = (char **)malloc(sizeof(char *) * p_parameter->count);
 
     /* 构造参数向量*/
+    parameter_count = p_parameter->count;
     for (--i; i >= 0; --i) {
         if (content_of_input[i] == ' ')
             content_of_input[i] = 0;
         if (content_of_input[i] == 0 && content_of_input[i + 1] != 0)
-            p_parameter->vector[--p_parameter->count] = content_of_input + (i + 1);
+            p_parameter->vector[--parameter_count] = content_of_input + (i + 1);
     }
     if (*content_of_input != ' ' && *content_of_input != 0)
         p_parameter->vector[0] = content_of_input;
@@ -104,7 +110,7 @@ void structure_parameter(char *content_of_input, struct parameter_struct *p_para
 /* 重设*/
 void reset(struct minefield_struct *p_minefield)
 {
-    void process_argv(int argc, char *argv[], struct minefield_struct *p_minefield);
+    int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield);
 
     int i;
     char content_of_input[BUFSIZ] = {0};
@@ -132,15 +138,15 @@ void reset(struct minefield_struct *p_minefield)
 /* judge() 胜负判断*/
 int judge(struct minefield_struct *p_minefield)
 {
-    int x, y, rest_of_blocks;
+    int x, y, rest_of_blocks = 0;
 
-    for (x = 1; x <= p_minefield->length; ++x)
-        for (y = 1; y <= p_minefield->width; ++y) {
+    for (x = 0; x < p_minefield->length; ++x)
+        for (y = 0; y < p_minefield->width; ++y) {
             if (p_minefield->explicit[y][x] == '*') {
                 /* 地雷显式化*/
-                for (x = 1; x <= p_minefield->length; ++x)
-                    for (y = 1; y <= p_minefield->width; ++y) {
-                        if (p_minefield->implicit[y - 1][x -1] == MINE)
+                for (x = 0; x < p_minefield->length; ++x)
+                    for (y = 0; y < p_minefield->width; ++y) {
+                        if (p_minefield->implicit[y][x] == MINE)
                             p_minefield->explicit[y][x] = '*';
                     }
 
@@ -155,9 +161,7 @@ int judge(struct minefield_struct *p_minefield)
 }
 
 /* round_operation() 回合操作
- * explicit有坐标轴，故区块的坐标x, y值即为对数组地址偏移量
- * 而implicit则仍需将坐标值减一才为偏移量
- * 此外，坐标值与数组下标有转置关系
+ * 注意：坐标与偏移转换；坐标与数组下标有转置关系
  * 辅助函数：
  * operation_help() 操作帮助    comfirm_restart() 重开游戏    comfirm_quit() 退出游戏
  * detect_block() 探测          mark_block() 标记             remove_mark() 移除标记 
@@ -166,9 +170,9 @@ int judge(struct minefield_struct *p_minefield)
  */
 int operation_help(int x, int y, struct minefield_struct *p_minefield)
 {
-    void help(int argc, char *argv[]);
+    void mine_help(int argc, char *argv[]);
 
-    help(0, NULL);
+    mine_help(0, NULL);
 
     return 0;
 }
@@ -186,40 +190,77 @@ int comfirm_quit(int x, int y, struct minefield_struct *p_minefield)
 }
 
 /* detect_block()的辅助函数
+ *  setup_range() 设定范围（并将坐标量转为偏移量）
+ * has_block_which() （周围）是否有某类区块
  * has_unknown_block() （周围）是否有不明区块（即未检查）
+ * has_blank_block() （周围）是否有空白区块（即周围无雷）
  * surrounding_mines() 周围的地雷（数目）
  * expand_and_detect() 扩大（范围）并检查
  */
-int has_unknown_block(int x, int y, struct minefield_struct *p_minefield)
+void setup_range(int x, int *x_min, int *x_max,
+                 int y, int *y_min, int *y_max,
+                 int len_of_range,
+                 int length, int width)
+{
+    /* 注意边界： 1 ~ length/width*/
+    *x_min = (x - len_of_range > 1) ? (x - len_of_range) : 1,
+    *x_max = (x + len_of_range < length) ? (x + len_of_range) : length;
+    *y_min = (y - len_of_range > 1) ? (y - len_of_range) : 1,
+    *y_max = (y + len_of_range < width) ? (y + len_of_range) : width;
+
+    /* 坐标转偏移*/
+    --*x_min, --*x_max,
+    --*y_min, --*y_max;
+}
+
+int has_block_which(char type, int x, int y, struct minefield_struct *p_minefield)
 {
     int x_min, x_max, y_min, y_max;
 
-    /* 注意边界*/
-    x_min = (x - 1) ? (x - 1) : 1,
-    x_max = (x + 1 - p_minefield->length) ? (x + 1) : p_minefield->length;
-    y_min = (y - 1) ? (y - 1) : 1,
-    y_max = (y + 1 - p_minefield->width) ? (y + 1) : p_minefield->width;
+    /* 设定范围（并将坐标量转为偏移量）*/
+    setup_range(x, &x_min, &x_max,
+                y, &y_min, &y_max,
+                1,
+                p_minefield->length, p_minefield->width);
 
     for (x = x_min; x <= x_max; ++x)
-        for (y = y_min; y <= y_max; ++y)
-            if (p_minefield->explicit[y][x] == '#') return 1;
+        for (y = y_min; y <= y_max; ++y) {
+            if (x == x_min || x == x_max
+                || y == y_min || y ==y_max) {
+                if (p_minefield->explicit[y][x] == type) return 1;
+            }
+        }
 
     return 0;
+}
+
+int has_unknown_block(int x, int y, struct minefield_struct *p_minefield)
+{
+    return has_block_which('#', x, y, p_minefield);
+}
+
+int has_blank_block(int x, int y, struct minefield_struct *p_minefield)
+{
+    return has_block_which(' ', x, y, p_minefield);
 }
 
 int surrounding_mines(int x, int y, struct minefield_struct *p_minefield)
 {
     int num_of_mines = 0, x_min, x_max, y_min, y_max;
 
-    /* 注意边界*/
-    x_min = (x - 1) ? (x - 1) : 1,
-    x_max = (x + 1 - p_minefield->length) ? (x + 1) : p_minefield->length;
-    y_min = (y - 1) ? (y - 1) : 1,
-    y_max = (y + 1 - p_minefield->width) ? (y + 1) : p_minefield->width;
+    /* 设定范围（并将坐标量转为偏移量）*/
+    setup_range(x, &x_min, &x_max,
+                y, &y_min, &y_max,
+                1,
+                p_minefield->length, p_minefield->width);
 
-    for (x = --x_min; x < x_max; ++x)
-        for (y = --y_min; y < y_max; ++y)
-            if (p_minefield->implicit[y][x] == MINE) ++num_of_mines;
+    for (x = x_min; x <= x_max; ++x)
+        for (y = y_min; y <= y_max; ++y) {
+            if (x == x_min || x == x_max
+                || y == y_min || y == y_max) {
+                if (p_minefield->implicit[y][x] == MINE) ++num_of_mines;
+            }
+        }
 
     return num_of_mines;
 }
@@ -229,59 +270,97 @@ int surrounding_mines(int x, int y, struct minefield_struct *p_minefield)
  */
 void expand_and_detect(int x, int y, struct minefield_struct *p_minefield)
 {
-    int count = 0, x_min, x_max, y_min, y_max;
+    int count = 0, X, Y, x_min, x_max, y_min, y_max, signal = 1;
 
-    for (;count != -1; ++count) {
-        /* 设置探测范围，注意边界*/
-        x_min = (x - count) ? (x - count) : 1,
-        x_max = (x + count - p_minefield->length) ? (x + count) : p_minefield->length;
-        y_min = (y - count) ? (y - count) : 1,
-        y_max = (y + count - p_minefield->width) ? (y + count) : p_minefield->width;
+    /* 保存原x, y值, 循环中多次是用原x, y*/
+    X = x, Y = y;
+
+    /* (x + 1), (y + 1) : 偏移转坐标*/
+    for (;signal != -1; ++count) {
+        signal = -1;
+
+        /* 设定范围（并将坐标量转为偏移量）*/
+        setup_range(X, &x_min, &x_max,
+                    Y, &y_min, &y_max,
+                    count,
+                    p_minefield->length, p_minefield->width);
 
         for (x = x_min; x <= x_max; ++x)
-            for (y = y_min; y <= y_max; ++y)
-                if (p_minefield->implicit[y - 1][x - 1] != MINE) {
-                    p_minefield->explicit[y][x] = surrounding_mines(x, y, p_minefield) + '0';
+            for (y = y_min; y <= y_max; ++y) {
+                if (p_minefield->implicit[y][x] != MINE
+                    && p_minefield->explicit[y][x] == '#'
+                    && has_blank_block(x + 1, y + 1, p_minefield)) {
+                    p_minefield->explicit[y][x] = surrounding_mines(x + 1, y + 1, p_minefield) + '0';
+
                     if (p_minefield->explicit[y][x] == '0') p_minefield->explicit[y][x] = ' ';
-                }
+                    }
+            }
 
         /* 判断是否需继续探测*/
         for (x = x_min; x <= x_max; ++x)
-            for (y = y_min; y <= y_max; ++y)
-                if (p_minefield->explicit[y][x] == ' '
-                    && has_unknown_block(x, y, p_minefield))
-                    count = -2;
+            for (y = y_min; y <= y_max; ++y) {
+                /* 只检查最外层*/
+                if (x == x_min || x == x_max
+                    || y == y_min || y == y_max) {
+                    if (p_minefield->explicit[y][x] == ' '
+                        && has_unknown_block(x + 1, y + 1, p_minefield))
+                        signal = 1;
+                }
+            }
     }
 }
 
 int detect_block(int x, int y, struct minefield_struct *p_minefield)
 {
+    /* 坐标转偏移*/
+    --x, --y;
+
+    /* (x + 1), (y + 1) : 偏移转坐标*/
     if (p_minefield->explicit[y][x] == ' '
-        || (p_minefield->explicit[y][x] >= '0' && p_minefield->explicit[y][x] <= '9'))
-        printf("(^_-)-| 安全的空地\n");
-    else if (p_minefield->explicit[y][x] == 'F')
-        printf("(-_^)-| 被标记了\n");
-    else if (p_minefield->implicit[y - 1][x - 1] == MINE)
-        p_minefield->implicit[y][x] = '*';
-    else
-        expand_and_detect(x, y, p_minefield);
+        || (p_minefield->explicit[y][x] >= '0' && p_minefield->explicit[y][x] <= '9')) {
+        printf("(^_-)-| (%d, %d)安全的空地\n", x + 1, y + 1);
+    } else if (p_minefield->explicit[y][x] == 'F') {
+        printf("(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
+    } else if (p_minefield->implicit[y][x] == MINE) {
+        p_minefield->explicit[y][x] = '*';
+    } else {
+        p_minefield->explicit[y][x] = surrounding_mines(x + 1, y + 1, p_minefield) + '0';
+
+        if (p_minefield->explicit[y][x] == '0') {
+            p_minefield->explicit[y][x] = ' ';
+            expand_and_detect(x + 1, y + 1, p_minefield);
+        }
+    }
 
     return 0;
 }
 
 int mark_block(int x, int y, struct minefield_struct *p_minefield)
 {
-    if (p_minefield->explicit[y][x] == '#') p_minefield->explicit[y][x] = 'F';
-    else if (p_minefield->explicit[y][x] == 'F') printf("(^_-)-F 已经标记过了\n");
-    else printf("(-_^)-F 不用标记\n");
+    /* 坐标转偏移*/
+    --x, --y;
+
+    /* (x + 1), (y + 1) : 偏移转坐标*/
+    if (p_minefield->explicit[y][x] == '#')
+        p_minefield->explicit[y][x] = 'F';
+    else if (p_minefield->explicit[y][x] == 'F')
+        printf("(^_-)-F (%d, %d)已经标记过了\n", x + 1, y + 1);
+    else
+        printf("(-_^)-F (%d, %d)不用标记\n", x + 1, y + 1);
 
     return 0;
 }
 
 int remove_mark(int x, int y, struct minefield_struct *p_minefield)
 {
-    if (p_minefield->explicit[y][x] == 'F') p_minefield->explicit[y][x] = '#';
-    else printf("/(-_-)\\ 并没有flag\n");
+    /* 坐标转偏移*/
+    --x, --y;
+
+    /* (x + 1), (y + 1) : 偏移转坐标*/
+    if (p_minefield->explicit[y][x] == 'F')
+        p_minefield->explicit[y][x] = '#';
+    else
+        printf("/(-_-)\\ (%d, %d)并没有flag\n", x + 1, y + 1);
 
     return 0;
 }
@@ -301,6 +380,7 @@ void get_coordinate(char *coordinate, int *p_x, int *p_y)
 
     for (i = 0; coordinate[i] != 0; ++i)
         if (coordinate[i] == ',') break;
+
     if (coordinate[i] == 0) {
         *p_x = *p_y = str2num(coordinate);
     } else {
@@ -315,8 +395,8 @@ int check_coordinate_format(char *coordinate)
     int i;
 
     for (i = 0; coordinate[i] != 0; ++i) {
-        if (!((coordinate[i] >= '0' && coordinate[i] <= '9')
-              || coordinate[i] != ','))
+        if (!(coordinate[i] >= '0' && coordinate[i] <= '9')
+            && coordinate[i] != ',')
             return 0;
         if (coordinate[i] == ','
             && (i == 0 || coordinate[i + 1] == 0))
@@ -328,7 +408,7 @@ int check_coordinate_format(char *coordinate)
 
 int round_operation(char *content_of_input, struct minefield_struct *p_minefield)
 {
-    int i, j, x = 0, y = 0;
+    int i, j, x = 0, y = 0, signal = 0;
     char flags[7] = {'h', 'r', 'q', 'd', 'D', 'm', '-'};
     struct parameter_struct parameter = {0, NULL};
     int (*operate[7])(int x, int y, struct minefield_struct *p_minefield) = {
@@ -343,7 +423,7 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
         for (j = 0; j < 7; ++j) {
             if (parameter.vector[i][0] == flags[j]) {
                 if (j < 3) {
-                    return (*operate[j])(x, y, p_minefield);
+                    if ((signal = (*operate[j])(x, y, p_minefield))) return signal;
                 } else {
                     /* 将其后坐标参数进行相应操作*/
                     for (; ++i < parameter.count;)
@@ -363,14 +443,34 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
     return 0;
 }
 
-/* 显示雷区*/
+/* 显示雷区
+ * 辅助函数：digits_of() （正整数）的位数
+ */
+int digits_of(int num)
+{
+    int digits;
+
+    for (digits = 1; (num / 10) != 0; ++digits)
+        num %= 10;
+
+    return digits;
+}
+
 void display_minefield(struct minefield_struct *p_minefield)
 {
-    int i, j;
+    int i, j, k;
 
     for (i = 0; i <= p_minefield->width; ++i)
         for (j = 0; j <= p_minefield->length; ++j) {
-            putchar(p_minefield->explicit[i][j]);
+            if (i == 0 ||  j == 0) {
+                printf("%d", (i == 0) ? j : i);    //坐标轴
+            } else {
+                putchar(p_minefield->explicit[i - 1][j - 1]);
+
+                /* 空格补齐*/
+                for (k = 1; k < digits_of(i); ++k)
+                    putchar(' ');
+            }
 
             if (j == p_minefield->length) putchar('\n');
             else putchar(' ');
@@ -384,14 +484,12 @@ void setup_minefield(struct minefield_struct *p_minefield)
     int i, j, count;
 
     /* 显式*/
-    for (i = 0; i <= p_minefield->width; ++i)
-        for (j = 0; j <= p_minefield->length; ++j) {
-            if (i == 0 || j == 0) p_minefield->explicit[i][j] = i ? (i + '0') : (j + '0');
-            else p_minefield->explicit[i][j] = '#';
-        }
+    for (i = 0; i < p_minefield->width; ++i)
+        for (j = 0; j < p_minefield->length; ++j)
+            p_minefield->explicit[i][j] = '#';
 
     /* 隐式*/
-    for ( i = 0; i < p_minefield->width; ++i)
+    for (i = 0; i < p_minefield->width; ++i)
         for (j = 0; j < p_minefield->length; ++j)
             p_minefield->implicit[i][j] = 0;
 
@@ -406,12 +504,14 @@ void setup_minefield(struct minefield_struct *p_minefield)
 int start_minesweeper(struct minefield_struct *p_minefield)
 {
     /* signal -- -1 退出, 1 重开; judgement -- -1 负, 1 胜*/
-    int i, count = 0, signal = 0, judgement = 0;
+    int i, count = 1, signal = 0, judgement = 0;
     char content_of_input[BUFSIZ] = {0};
 
     allocate_minefield(p_minefield);
     for (;; signal = judgement = 0) {
         setup_minefield(p_minefield);
+
+        printf("第%d局\n", count);
 
         /* 回合处理*/
         for(;;) {
@@ -458,7 +558,7 @@ int start_minesweeper(struct minefield_struct *p_minefield)
 }
 
 /* 用法帮助*/
-void help(int argc, char *argv[])
+void mine_help(int argc, char *argv[])
 {
     if (argc) {
         printf("命令参数：\n");
@@ -474,11 +574,11 @@ void help(int argc, char *argv[])
     printf("\t d|D   detect 探测地雷（D 强行探测标记块及忽略空白块警告）\n");
     printf("\t m     mark 标记地雷\n");
     printf("\t -     去除标记\n");
-    printf("h, r, q 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
+    printf("\th, r, q 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
 }
 
 /* process_argv() 参数处理
- * external call: parts_cmp() -- str.h
+ * external call: cmp_str() -- str.h
  * 辅助函数：
  * set_area() 设置面积
  * external call: str2num() -- str.h
@@ -516,43 +616,44 @@ double set_num_of_mines(char *arg, struct minefield_struct *p_minefield)
 
 int check_arg_format(char *setting_content, char *arg)
 {
-    int i = 0, true_or_false = 1;
+    int i;
     char vaild_character = 'x';
 
     if (arg[1] == 'm') vaild_character = '%';
 
-    for (;setting_content[i] != 0; ++i) {
+    for (i = 0; setting_content[i] != 0; ++i) {
         /* 通检*/
         if (!(setting_content[i] >='0' && setting_content[i] <= '9')
-            || setting_content[i] != vaild_character)
-            true_or_false = 0;
+            && setting_content[i] != vaild_character)
+            return 0;
 
         /* 特检*/
         if (setting_content[i] == 'x' && setting_content[i + 1] == 0)
-            true_or_false = 0;
+            return 0;
 
         if (setting_content[i] == '%' && setting_content[i + 1] != 0)
-            true_or_false = 0;
+            return 0;
     }
 
-    return true_or_false;
+    return 1;
 }
 
-void process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
+int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
 {
     int i;
     double rate_of_mines = 0.0;
 
     for (i = 0; i < argc; ++i) {
-        if (parts_cmp(argv[i], "-h")) {
-            help(argc, argv);
-        } else if (parts_cmp(argv[i], "-a")) {
+        if (cmp_str(argv[i], "-h")) {
+            mine_help(argc, argv);
+            return 1;
+        } else if (cmp_str(argv[i], "-a")) {
             if (++i < argc && check_arg_format(argv[i], argv[i - 1])) {
                 set_area(argv[i], p_minefield);
             } else {
                 printf("参数%s后设定内容格式错误，已忽略\n", argv[--i]);
             }
-        } else if (parts_cmp(argv[i], "-m")) {
+        } else if (cmp_str(argv[i], "-m")) {
             if (++i < argc && check_arg_format(argv[i], argv[i - 1])) {
                 rate_of_mines = set_num_of_mines(argv[i], p_minefield);
             } else {
@@ -573,13 +674,16 @@ void process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
             * (p_minefield->length * p_minefield->width);
         if (p_minefield->num_of_mines == 0) p_minefield->num_of_mines = 1;
     }
+
+    return 0;
 }
 
 int mine_main(int argc, char *argv[])
 {
-    struct minefield_struct minefield = {10, 10, 9, NULL, NULL};
+    struct minefield_struct minefield = {9, 9, 10, NULL, NULL};
 
-    process_argv(--argc, ++argv, &minefield);
+    /* （显示帮助）返回值为1，退出*/
+    if (process_argv(--argc, ++argv, &minefield)) return 0;
 
     start_minesweeper(&minefield);
 

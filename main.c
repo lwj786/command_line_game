@@ -34,17 +34,22 @@ int main(int argc, char *argv[])
         {"-h", &help}, {"--help", &help},
         {"mine", &mine_main}
     };
-    int i, count;
+    int i, signal = 0;
 
     --argc, ++argv;    //略过命令名
-    for (count = 0; argc > 0; --argc, ++argv) {
-        for (i = 0; i < GAMES_NUM + 2; ++i) {
-            if (parts_cmp(*argv, arg[i].name))
-                (*arg[i].method)(argc, argv), ++count;
-        }
+    for (; argc > 0; --argc, ++argv) {
+        for (i = 0; i < GAMES_NUM + 2; ++i)
+            if (cmp_str(*argv, arg[i].name)) {
+                (*arg[i].method)(argc, argv);
+                signal = 1;
+            }
 
-        if (!count) printf("无此参数：%s\n", *argv);
-        else count = 0;
+        if (signal) {
+            break;
+        } else {
+            printf("无此参数：%s\n", *argv);
+            signal = 0;
+        }
     }
 
     return 0;
