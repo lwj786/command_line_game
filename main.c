@@ -4,7 +4,11 @@
  */
 
 #include <stdio.h>
-#define GAMES_NUM 0
+
+#include "str.h"
+#include "game.h"
+
+#define GAMES_NUM 1
 
 struct
 argument_struct{
@@ -18,48 +22,34 @@ int help(int argc, char *argv[])
     printf("用法：[command] {option} 或 [command] [game name] {option}\n");
     printf("主函数参数：\n");
     printf("\t -h, --help 用法帮助\n");
+    printf("游戏：mine 扫雷\n");
+    printf("使用[command] [game name] --help | -h 查看帮助\n");
 
     return 0;
-}
-
-/* 字符部分比对
- * parameter: str 需比较的字符串部分（的起始位置）, cmp 比对项
- * return: rt true 1 or flase 0
- */
-int parts_cmp(char *str, char *cmp)
-{
-    int i = 0,rt = 0;
-
-    for (;; ++i) {
-        if (cmp[i] == 0)    //能执行到cmp结束，说明之前都相同
-            break;
-        else if (str[i] == cmp[i])
-            rt = 1;
-        else
-            rt = 0;
-
-        if (rt == 0) break;
-    }
-
-    return rt;
 }
 
 int main(int argc, char *argv[])
 {
     struct argument_struct arg[GAMES_NUM + 2] = {
-        {"-h", &help}, {"--help", &help}
+        {"-h", &help}, {"--help", &help},
+        {"mine", &mine_main}
     };
-    int i, count;
+    int i, signal = 0;
 
     --argc, ++argv;    //略过命令名
-    for (count = 0; argc > 0; --argc, ++argv) {
-        for (i = 0; i < GAMES_NUM + 2; ++i) {
-            if (parts_cmp(*argv, arg[i].name))
-                (*arg[i].method)(argc, argv), ++count;
-        }
+    for (; argc > 0; --argc, ++argv) {
+        for (i = 0; i < GAMES_NUM + 2; ++i)
+            if (cmp_str(*argv, arg[i].name)) {
+                (*arg[i].method)(argc, argv);
+                signal = 1;
+            }
 
-        if (!count) printf("无此参数：%s\n", *argv);
-        else count = 0;
+        if (signal) {
+            break;
+        } else {
+            printf("无此参数：%s\n", *argv);
+            signal = 0;
+        }
     }
 
     return 0;
