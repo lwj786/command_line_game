@@ -408,11 +408,21 @@ int check_coordinate_format(char *coordinate)
 
 int round_operation(char *content_of_input, struct minefield_struct *p_minefield)
 {
+    /* OPERATION_NUM 可进行操作的数目
+     * CTRL_OPERATION_NUM 控制游戏（进程）操作的数目
+     */
+    #define OPERATION_NUM 9
+    #define CTRL_OPERATION_NUM 5
+
     int i, j, x = 0, y = 0, signal = 0;
-    char flags[7] = {'h', 'r', 'q', 'd', 'D', 'm', '-'};
     struct parameter_struct parameter = {0, NULL};
-    int (*operate[7])(int x, int y, struct minefield_struct *p_minefield) = {
-        &operation_help, &comfirm_restart, &comfirm_quit,
+
+    char flags[OPERATION_NUM] = {
+        'h', 'r', 'R', 'q', 'Q',
+        'd', 'D', 'm', '-'
+    };
+    int (*operate[OPERATION_NUM])(int x, int y, struct minefield_struct *p_minefield) = {
+        &operation_help, &comfirm_restart, NULL, &comfirm_quit, NULL,
         &detect_block, &detect_block, &mark_block, &remove_mark
     };
 
@@ -420,10 +430,15 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
 
     /* 遍历参数按命令执行相应操作*/
     for (i = 0; i < parameter.count; ++i)
-        for (j = 0; j < 7; ++j) {
+        for (j = 0; j < OPERATION_NUM; ++j) {
             if (parameter.vector[i][0] == flags[j]) {
-                if (j < 3) {
-                    if ((signal = (*operate[j])(x, y, p_minefield))) return signal;
+                if (j < CTRL_OPERATION_NUM) {
+                    if (operate[j] == NULL) {
+                        return signal = (parameter.vector[i][0] == 'R') ?
+                                        RESTART : QUIT;    //大写的重开与退出无需确认
+                    } else if ((signal = (*operate[j])(x, y, p_minefield))) {
+                        return signal;
+                    }
                 } else {
                     /* 将其后坐标参数进行相应操作*/
                     for (; ++i < parameter.count;)
@@ -439,6 +454,9 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
                 break;
             }
         }
+
+    #undef OPERATION_NUM
+    #undef CTRL_OPERATION_NUM
 
     return 0;
 }
@@ -569,12 +587,12 @@ void mine_help(int argc, char *argv[])
 
     printf("游戏操作：\n");
     printf("\t h     操作帮助\n");
-    printf("\t r     重开\n");
-    printf("\t q     退出\n");
+    printf("\t r|R   重开（R 不询问确定与否）\n");
+    printf("\t q|Q   退出（Q 不询问确定与否）\n");
     printf("\t d|D   detect 探测地雷（D 强行探测标记块及忽略空白块警告）\n");
     printf("\t m     mark 标记地雷\n");
     printf("\t -     去除标记\n");
-    printf("\th, r, q 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
+    printf("\th, r(R), q(Q) 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
 }
 
 /* process_argv() 参数处理
