@@ -9,16 +9,27 @@
 #include "str.h"
 
 #define MINE 1
+
 #define QUIT -1
 #define RESTART 1
+
 #define DEFEAT -1
 #define VICTORY 1
+
+#define ENABLE 1
+#define DISABLE 0
 
 struct
 minefield_struct {
     int length, width, num_of_mines,
         **implicit;
     char **explicit;
+
+    int color_mode;
+
+    struct record_struct {
+        int trigger_x, trigger_y;
+    } game_record;
 };
 
 struct
@@ -318,11 +329,13 @@ int detect_block(int x, int y, struct minefield_struct *p_minefield)
     /* (x + 1), (y + 1) : 偏移转坐标*/
     if (p_minefield->explicit[y][x] == ' '
         || (p_minefield->explicit[y][x] >= '0' && p_minefield->explicit[y][x] <= '9')) {
-        printf("(^_-)-| (%d, %d)安全的空地\n", x + 1, y + 1);
+        printf("\t(^_-)-| (%d, %d)安全的空地\n", x + 1, y + 1);
     } else if (p_minefield->explicit[y][x] == 'F') {
-        printf("(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
+        printf("\t(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
     } else if (p_minefield->implicit[y][x] == MINE) {
         p_minefield->explicit[y][x] = '*';
+        p_minefield->game_record.trigger_x = x + 1,
+        p_minefield->game_record.trigger_y = y + 1;
     } else {
         p_minefield->explicit[y][x] = surrounding_mines(x + 1, y + 1, p_minefield) + '0';
 
@@ -344,9 +357,9 @@ int mark_block(int x, int y, struct minefield_struct *p_minefield)
     if (p_minefield->explicit[y][x] == '#')
         p_minefield->explicit[y][x] = 'F';
     else if (p_minefield->explicit[y][x] == 'F')
-        printf("(^_-)-F (%d, %d)已经标记过了\n", x + 1, y + 1);
+        printf("\t(^_-)-F (%d, %d)已经标记过了\n", x + 1, y + 1);
     else
-        printf("(-_^)-F (%d, %d)不用标记\n", x + 1, y + 1);
+        printf("\t(-_^)-F (%d, %d)不用标记\n", x + 1, y + 1);
 
     return 0;
 }
@@ -360,7 +373,7 @@ int remove_mark(int x, int y, struct minefield_struct *p_minefield)
     if (p_minefield->explicit[y][x] == 'F')
         p_minefield->explicit[y][x] = '#';
     else
-        printf("/(-_-)\\ (%d, %d)并没有flag\n", x + 1, y + 1);
+        printf("\t/(-_-)\\ (%d, %d)并没有flag\n", x + 1, y + 1);
 
     return 0;
 }
@@ -474,16 +487,68 @@ int digits_of(int num)
     return digits;
 }
 
+/* 设置颜色（输出终端颜色序列）*/
+void set_color(char *color, char *background_color)
+{
+    int index;
+
+    if (color != NULL && background_color != NULL) {
+        color[index = index_of(color, 'm')] = 0;
+        printf("%s%s", color,
+            background_color + index_of(background_color, ';'));
+
+        color[index] = 'm';
+    } else if (color != NULL) {
+        printf("%s", color);
+    } else if (background_color != NULL) {
+        printf("%s", background_color);
+    }
+}
+
+/* 清除颜色*/
+void clean_color()
+{
+    printf("\033[00m");
+}
+
 void display_minefield(struct minefield_struct *p_minefield)
 {
+    char color_of_coordinate_frame[] = "\033[0;32m", color_of_num[] = "\033[1;33m",
+        color_of_mine[] = "\033[0;30m", background_color_of_trigger_mine[] = "\033[0;41m",
+        color_of_flag[] = "\033[0;31m";
+    char *color = NULL, *background_color = NULL;
     int i, j, k;
+
+    if (p_minefield->color_mode == DISABLE) {
+        *color_of_coordinate_frame = *color_of_num
+        = *color_of_mine = *background_color_of_trigger_mine
+        = *color_of_flag
+        = 0;
+    }
 
     for (i = 0; i <= p_minefield->width; ++i)
         for (j = 0; j <= p_minefield->length; ++j) {
             if (i == 0 ||  j == 0) {
+                set_color(color_of_coordinate_frame, NULL);
                 printf("%d", (i == 0) ? j : i);    //坐标轴
+                clean_color();
             } else {
+                if (p_minefield->game_record.trigger_x == j
+                    && p_minefield->game_record.trigger_y == i)
+                    background_color = background_color_of_trigger_mine;
+
+                if (p_minefield->explicit[i - 1][j - 1] > '0'
+                    && p_minefield->explicit[i - 1][j - 1] <='9')
+                    color = color_of_num;
+                else if (p_minefield->explicit[i - 1][j - 1] == '*')
+                    color = color_of_mine;
+                else if (p_minefield->explicit[i - 1][j - 1] == 'F')
+                    color = color_of_flag;
+
+                set_color(color, background_color);
+                color = background_color = NULL;
                 putchar(p_minefield->explicit[i - 1][j - 1]);
+                clean_color();
 
                 /* 空格补齐*/
                 for (k = 1; k < digits_of(i); ++k)
@@ -553,10 +618,10 @@ int start_minesweeper(struct minefield_struct *p_minefield)
         /* 终局处理*/
         if (signal != QUIT) {
             if (judgement == VICTORY) { 
-                printf("\\(^_^)/\n");
+                printf("\t\\(^_^)/\n");
                 display_minefield(p_minefield);
             } else if (judgement == DEFEAT) {
-                printf("/(T-T)\\\n");
+                printf("\t/(T-T)\\\n");
                 display_minefield(p_minefield);
             }
 
@@ -581,8 +646,9 @@ void mine_help(int argc, char *argv[])
     if (argc) {
         printf("命令参数：\n");
         printf("\t -h 用法帮助\n");
-        printf("\t -a 设置雷区面积(格数)，后接参数格式为长乘宽或边长如 -a 9x10 | -a 10\n");
+        printf("\t -a 设置雷区面积（格数），后接参数格式为长乘宽或边长如 -a 9x10 | -a 10\n");
         printf("\t -m 设置地雷个数，后接个数或比例，如 -m 9 | -m 90%%\n");
+        printf("\t -C 禁用彩色显示（默认彩色输出需终端支持）\n");
     }
 
     printf("游戏操作：\n");
@@ -677,6 +743,8 @@ int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
             } else {
                 printf("参数%s后设定内容格式错误，已忽略\n", argv[--i]);
             }
+        } else if (cmp_str(argv[i], "-C")) {
+            p_minefield->color_mode = DISABLE;
         }
     }
 
@@ -698,7 +766,12 @@ int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
 
 int mine_main(int argc, char *argv[])
 {
-    struct minefield_struct minefield = {9, 9, 10, NULL, NULL};
+    struct minefield_struct minefield = {
+        9, 9, 10,
+        NULL, NULL,
+        ENABLE,
+        {0, 0}
+    };
 
     /* （显示帮助）返回值为1，退出*/
     if (process_argv(--argc, ++argv, &minefield)) return 0;
