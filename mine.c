@@ -9,16 +9,32 @@
 #include "str.h"
 
 #define MINE 1
+
 #define QUIT -1
 #define RESTART 1
+
 #define DEFEAT -1
 #define VICTORY 1
+
+#define ENABLE 1
+#define DISABLE 0
+
+struct record_struct {
+    int trigger_x, trigger_y,
+        result;
+    time_t time_of_use;
+};
 
 struct
 minefield_struct {
     int length, width, num_of_mines,
         **implicit;
     char **explicit;
+
+    int game_count;
+    int color_mode;
+
+    struct record_struct *p_game_record;
 };
 
 struct
@@ -312,17 +328,21 @@ void expand_and_detect(int x, int y, struct minefield_struct *p_minefield)
 
 int detect_block(int x, int y, struct minefield_struct *p_minefield)
 {
+    int record_index = p_minefield->game_count - 1;
+
     /* 坐标转偏移*/
     --x, --y;
 
     /* (x + 1), (y + 1) : 偏移转坐标*/
     if (p_minefield->explicit[y][x] == ' '
         || (p_minefield->explicit[y][x] >= '0' && p_minefield->explicit[y][x] <= '9')) {
-        printf("(^_-)-| (%d, %d)安全的空地\n", x + 1, y + 1);
+        printf("\t(^_-)-| (%d, %d)安全的空地\n", x + 1, y + 1);
     } else if (p_minefield->explicit[y][x] == 'F') {
-        printf("(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
+        printf("\t(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
     } else if (p_minefield->implicit[y][x] == MINE) {
         p_minefield->explicit[y][x] = '*';
+        p_minefield->p_game_record[record_index].trigger_x = x + 1,
+        p_minefield->p_game_record[record_index].trigger_y = y + 1;
     } else {
         p_minefield->explicit[y][x] = surrounding_mines(x + 1, y + 1, p_minefield) + '0';
 
@@ -344,9 +364,9 @@ int mark_block(int x, int y, struct minefield_struct *p_minefield)
     if (p_minefield->explicit[y][x] == '#')
         p_minefield->explicit[y][x] = 'F';
     else if (p_minefield->explicit[y][x] == 'F')
-        printf("(^_-)-F (%d, %d)已经标记过了\n", x + 1, y + 1);
+        printf("\t(^_-)-F (%d, %d)已经标记过了\n", x + 1, y + 1);
     else
-        printf("(-_^)-F (%d, %d)不用标记\n", x + 1, y + 1);
+        printf("\t(-_^)-F (%d, %d)不用标记\n", x + 1, y + 1);
 
     return 0;
 }
@@ -360,7 +380,7 @@ int remove_mark(int x, int y, struct minefield_struct *p_minefield)
     if (p_minefield->explicit[y][x] == 'F')
         p_minefield->explicit[y][x] = '#';
     else
-        printf("/(-_-)\\ (%d, %d)并没有flag\n", x + 1, y + 1);
+        printf("\t/(-_-)\\ (%d, %d)并没有flag\n", x + 1, y + 1);
 
     return 0;
 }
@@ -408,11 +428,21 @@ int check_coordinate_format(char *coordinate)
 
 int round_operation(char *content_of_input, struct minefield_struct *p_minefield)
 {
+    /* OPERATION_NUM 可进行操作的数目
+     * CTRL_OPERATION_NUM 控制游戏（进程）操作的数目
+     */
+    #define OPERATION_NUM 9
+    #define CTRL_OPERATION_NUM 5
+
     int i, j, x = 0, y = 0, signal = 0;
-    char flags[7] = {'h', 'r', 'q', 'd', 'D', 'm', '-'};
     struct parameter_struct parameter = {0, NULL};
-    int (*operate[7])(int x, int y, struct minefield_struct *p_minefield) = {
-        &operation_help, &comfirm_restart, &comfirm_quit,
+
+    char flags[OPERATION_NUM] = {
+        'h', 'r', 'R', 'q', 'Q',
+        'd', 'D', 'm', '-'
+    };
+    int (*operate[OPERATION_NUM])(int x, int y, struct minefield_struct *p_minefield) = {
+        &operation_help, &comfirm_restart, NULL, &comfirm_quit, NULL,
         &detect_block, &detect_block, &mark_block, &remove_mark
     };
 
@@ -420,10 +450,15 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
 
     /* 遍历参数按命令执行相应操作*/
     for (i = 0; i < parameter.count; ++i)
-        for (j = 0; j < 7; ++j) {
+        for (j = 0; j < OPERATION_NUM; ++j) {
             if (parameter.vector[i][0] == flags[j]) {
-                if (j < 3) {
-                    if ((signal = (*operate[j])(x, y, p_minefield))) return signal;
+                if (j < CTRL_OPERATION_NUM) {
+                    if (operate[j] == NULL) {
+                        return signal = (parameter.vector[i][0] == 'R') ?
+                                        RESTART : QUIT;    //大写的重开与退出无需确认
+                    } else if ((signal = (*operate[j])(x, y, p_minefield))) {
+                        return signal;
+                    }
                 } else {
                     /* 将其后坐标参数进行相应操作*/
                     for (; ++i < parameter.count;)
@@ -439,6 +474,9 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
                 break;
             }
         }
+
+    #undef OPERATION_NUM
+    #undef CTRL_OPERATION_NUM
 
     return 0;
 }
@@ -456,16 +494,68 @@ int digits_of(int num)
     return digits;
 }
 
+/* 设置颜色（输出终端颜色序列）*/
+void set_color(char *color, char *background_color)
+{
+    int index;
+
+    if (color != NULL && background_color != NULL) {
+        color[index = index_of(color, 'm')] = 0;
+        printf("%s%s", color,
+            background_color + index_of(background_color, ';'));
+
+        color[index] = 'm';
+    } else if (color != NULL) {
+        printf("%s", color);
+    } else if (background_color != NULL) {
+        printf("%s", background_color);
+    }
+}
+
+/* 清除颜色*/
+void clean_color()
+{
+    printf("\033[00m");
+}
+
 void display_minefield(struct minefield_struct *p_minefield)
 {
-    int i, j, k;
+    char color_of_coordinate_frame[] = "\033[0;32m", color_of_num[] = "\033[1;33m",
+        color_of_mine[] = "\033[0;30m", background_color_of_trigger_mine[] = "\033[0;41m",
+        color_of_flag[] = "\033[0;31m";
+    char *color = NULL, *background_color = NULL;
+    int i, j, k, record_index = p_minefield->game_count - 1;
+
+    if (p_minefield->color_mode == DISABLE) {
+        *color_of_coordinate_frame = *color_of_num
+        = *color_of_mine = *background_color_of_trigger_mine
+        = *color_of_flag
+        = 0;
+    }
 
     for (i = 0; i <= p_minefield->width; ++i)
         for (j = 0; j <= p_minefield->length; ++j) {
             if (i == 0 ||  j == 0) {
+                set_color(color_of_coordinate_frame, NULL);
                 printf("%d", (i == 0) ? j : i);    //坐标轴
+                clean_color();
             } else {
+                if (p_minefield->p_game_record[record_index].trigger_x == j
+                    && p_minefield->p_game_record[record_index].trigger_y == i)
+                    background_color = background_color_of_trigger_mine;
+
+                if (p_minefield->explicit[i - 1][j - 1] > '0'
+                    && p_minefield->explicit[i - 1][j - 1] <='9')
+                    color = color_of_num;
+                else if (p_minefield->explicit[i - 1][j - 1] == '*')
+                    color = color_of_mine;
+                else if (p_minefield->explicit[i - 1][j - 1] == 'F')
+                    color = color_of_flag;
+
+                set_color(color, background_color);
+                color = background_color = NULL;
                 putchar(p_minefield->explicit[i - 1][j - 1]);
+                clean_color();
 
                 /* 空格补齐*/
                 for (k = 1; k < digits_of(i); ++k)
@@ -496,25 +586,88 @@ void setup_minefield(struct minefield_struct *p_minefield)
     srand(time(NULL));
     for (count = 0; count < p_minefield->num_of_mines;) {
         i = rand() % p_minefield->width, j = rand() % p_minefield->length;
-        if (!p_minefield->implicit[i][j]) p_minefield->implicit[i][j] = MINE, ++count;
+        if (!p_minefield->implicit[i][j])
+            p_minefield->implicit[i][j] = MINE, ++count;
+    }
+}
+
+/* 显示游戏记录
+ * 辅助函数：以时分秒打印日历时间
+ */
+void print_time_in_hms(time_t time)
+{
+    int hour = 0, minute = 0, second = time;
+
+    minute = second / 60, second %= 60;
+    hour = minute / 60, minute %= 60;
+
+    if (hour) printf("%d时", hour);
+    printf("%d分%d秒", minute, second);
+}
+
+void show_record(int game_count, struct record_struct *p_game_record)
+{
+    int i, count_of_victory = 0, count_of_defeat = 0, count_of_stop = 0;
+    time_t min_time, max_time;
+    max_time = min_time = p_game_record->time_of_use;
+
+    for (i = 0; i < game_count; ++i) {
+        /* 胜、中止记录*/
+        if (p_game_record[i].result == VICTORY) ++count_of_victory;
+        else if (p_game_record[i].result == 0) ++count_of_stop;
+
+        /* 最长、最短时间*/
+        if (p_game_record[i].time_of_use < min_time && p_game_record[i].result)
+            min_time = p_game_record[i].time_of_use;
+        if (p_game_record[i].time_of_use > max_time && p_game_record[i].result)
+            max_time = p_game_record[i].time_of_use;
+    }
+    count_of_defeat = game_count
+        - (count_of_victory + count_of_stop);
+
+    printf("%d胜%d负", count_of_victory, count_of_defeat);
+    if (count_of_stop) printf("%d中止", count_of_stop);
+    putchar('\n');
+
+    if (max_time != 0) {
+        printf("用时最长：");
+        print_time_in_hms(max_time);
+        putchar('\n');
+    }
+    if (min_time != 0) {
+        printf("用时最短：");
+        print_time_in_hms(min_time);
+        putchar('\n');
     }
 }
 
 /* 开始游戏*/
-int start_minesweeper(struct minefield_struct *p_minefield)
+void start_minesweeper(struct minefield_struct *p_minefield)
 {
-    /* signal -- -1 退出, 1 重开; judgement -- -1 负, 1 胜*/
-    int i, count = 1, signal = 0, judgement = 0;
+    /* signal -- -1 退出, 1 重开*/
+    int i, signal = 0, record_index;
     char content_of_input[BUFSIZ] = {0};
 
     allocate_minefield(p_minefield);
-    for (;; signal = judgement = 0) {
+    for (;; signal = 0) {
         setup_minefield(p_minefield);
 
-        printf("第%d局\n", count);
+        /* 为游戏记录分配/重分配空间*/
+        if (p_minefield->p_game_record == NULL) {
+            p_minefield->p_game_record =
+                (struct record_struct *)malloc(sizeof(struct record_struct));
+        } else {
+            p_minefield->p_game_record =
+                (struct record_struct *)realloc(p_minefield->p_game_record,
+                    sizeof(struct record_struct) * p_minefield->game_count);
+        }
+        record_index = p_minefield->game_count - 1;
+        p_minefield->p_game_record[record_index].result = 0;
+
+        printf("第%d局\n", p_minefield->game_count);
 
         /* 回合处理*/
-        for(;;) {
+        for(p_minefield->p_game_record[record_index].time_of_use = time(NULL);;) {
             display_minefield(p_minefield);
 
             /* 由stdin获取输入*/
@@ -529,32 +682,41 @@ int start_minesweeper(struct minefield_struct *p_minefield)
             signal = round_operation(content_of_input, p_minefield);
             if (signal) break;
 
-            if ((judgement = judge(p_minefield))) break;
+            if ((p_minefield->p_game_record[record_index].result
+                = judge(p_minefield))) {
+                p_minefield->p_game_record[record_index].time_of_use =
+                    time(NULL) - p_minefield->p_game_record[record_index].time_of_use;
+                break;
+            }
         }
 
         /* 终局处理*/
         if (signal != QUIT) {
-            if (judgement == VICTORY) { 
-                printf("\\(^_^)/\n");
+            if (p_minefield->p_game_record[record_index].result == VICTORY) {
+                printf("\t\\(^_^)/\n");
+                printf("用时：%s\n", ctime(&(p_minefield->p_game_record[record_index].time_of_use)));
                 display_minefield(p_minefield);
-            } else if (judgement == DEFEAT) {
-                printf("/(T-T)\\\n");
+            } else if (p_minefield->p_game_record[record_index].result == DEFEAT) {
+                printf("\t/(T-T)\\\n");
+                printf("用时：%s\n", ctime(&(p_minefield->p_game_record[record_index].time_of_use)));
                 display_minefield(p_minefield);
             }
 
             if (signal || comfirm("再来一局(y/n): ")) {
-                ++count;
+                ++p_minefield->game_count;
                 reset(p_minefield);
             } else {
+                show_record(p_minefield->game_count, p_minefield->p_game_record);
                 break;
             }
         } else {
+            show_record(p_minefield->game_count, p_minefield->p_game_record);
             break;
         }
     }
-    free_minefield(p_minefield);
 
-    return count;
+    free(p_minefield->p_game_record);
+    free_minefield(p_minefield);
 }
 
 /* 用法帮助*/
@@ -563,18 +725,19 @@ void mine_help(int argc, char *argv[])
     if (argc) {
         printf("命令参数：\n");
         printf("\t -h 用法帮助\n");
-        printf("\t -a 设置雷区面积(格数)，后接参数格式为长乘宽或边长如 -a 9x10 | -a 10\n");
+        printf("\t -a 设置雷区面积（格数），后接参数格式为长乘宽或边长如 -a 9x10 | -a 10\n");
         printf("\t -m 设置地雷个数，后接个数或比例，如 -m 9 | -m 90%%\n");
+        printf("\t -C 禁用彩色显示（默认彩色输出需终端支持）\n");
     }
 
     printf("游戏操作：\n");
     printf("\t h     操作帮助\n");
-    printf("\t r     重开\n");
-    printf("\t q     退出\n");
+    printf("\t r|R   重开（R 不询问确定与否）\n");
+    printf("\t q|Q   退出（Q 不询问确定与否）\n");
     printf("\t d|D   detect 探测地雷（D 强行探测标记块及忽略空白块警告）\n");
     printf("\t m     mark 标记地雷\n");
     printf("\t -     去除标记\n");
-    printf("\th, r, q 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
+    printf("\th, r(R), q(Q) 执行此类命令忽略后面各命令参数; d|D, m, - 后加坐标值，格式 x,y | x 取y = x\n");
 }
 
 /* process_argv() 参数处理
@@ -659,6 +822,8 @@ int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
             } else {
                 printf("参数%s后设定内容格式错误，已忽略\n", argv[--i]);
             }
+        } else if (cmp_str(argv[i], "-C")) {
+            p_minefield->color_mode = DISABLE;
         }
     }
 
@@ -680,7 +845,13 @@ int process_argv(int argc, char *argv[], struct minefield_struct *p_minefield)
 
 int mine_main(int argc, char *argv[])
 {
-    struct minefield_struct minefield = {9, 9, 10, NULL, NULL};
+    struct minefield_struct minefield = {
+        9, 9, 10,
+        NULL, NULL,
+        1,
+        ENABLE,
+        NULL
+    };
 
     /* （显示帮助）返回值为1，退出*/
     if (process_argv(--argc, ++argv, &minefield)) return 0;

@@ -84,7 +84,7 @@ int index_of(char *str, char c)
 
     for (;str[i] != 0;)
         if (str[i++] == c) {
-            index = i;
+            index = --i;
             break;
         }
 
