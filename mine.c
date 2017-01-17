@@ -19,17 +19,22 @@
 #define ENABLE 1
 #define DISABLE 0
 
+struct record_struct {
+    int trigger_x, trigger_y,
+        result;
+    time_t time_of_use;
+};
+
 struct
 minefield_struct {
     int length, width, num_of_mines,
         **implicit;
     char **explicit;
 
+    int game_count;
     int color_mode;
 
-    struct record_struct {
-        int trigger_x, trigger_y;
-    } game_record;
+    struct record_struct *p_game_record;
 };
 
 struct
@@ -323,6 +328,8 @@ void expand_and_detect(int x, int y, struct minefield_struct *p_minefield)
 
 int detect_block(int x, int y, struct minefield_struct *p_minefield)
 {
+    int record_index = p_minefield->game_count - 1;
+
     /* 坐标转偏移*/
     --x, --y;
 
@@ -334,8 +341,8 @@ int detect_block(int x, int y, struct minefield_struct *p_minefield)
         printf("\t(-_^)-| (%d, %d)被标记了\n", x + 1, y + 1);
     } else if (p_minefield->implicit[y][x] == MINE) {
         p_minefield->explicit[y][x] = '*';
-        p_minefield->game_record.trigger_x = x + 1,
-        p_minefield->game_record.trigger_y = y + 1;
+        p_minefield->p_game_record[record_index].trigger_x = x + 1,
+        p_minefield->p_game_record[record_index].trigger_y = y + 1;
     } else {
         p_minefield->explicit[y][x] = surrounding_mines(x + 1, y + 1, p_minefield) + '0';
 
@@ -517,7 +524,7 @@ void display_minefield(struct minefield_struct *p_minefield)
         color_of_mine[] = "\033[0;30m", background_color_of_trigger_mine[] = "\033[0;41m",
         color_of_flag[] = "\033[0;31m";
     char *color = NULL, *background_color = NULL;
-    int i, j, k;
+    int i, j, k, record_index = p_minefield->game_count - 1;
 
     if (p_minefield->color_mode == DISABLE) {
         *color_of_coordinate_frame = *color_of_num
@@ -533,8 +540,8 @@ void display_minefield(struct minefield_struct *p_minefield)
                 printf("%d", (i == 0) ? j : i);    //坐标轴
                 clean_color();
             } else {
-                if (p_minefield->game_record.trigger_x == j
-                    && p_minefield->game_record.trigger_y == i)
+                if (p_minefield->p_game_record[record_index].trigger_x == j
+                    && p_minefield->p_game_record[record_index].trigger_y == i)
                     background_color = background_color_of_trigger_mine;
 
                 if (p_minefield->explicit[i - 1][j - 1] > '0'
@@ -579,25 +586,88 @@ void setup_minefield(struct minefield_struct *p_minefield)
     srand(time(NULL));
     for (count = 0; count < p_minefield->num_of_mines;) {
         i = rand() % p_minefield->width, j = rand() % p_minefield->length;
-        if (!p_minefield->implicit[i][j]) p_minefield->implicit[i][j] = MINE, ++count;
+        if (!p_minefield->implicit[i][j])
+            p_minefield->implicit[i][j] = MINE, ++count;
+    }
+}
+
+/* 显示游戏记录
+ * 辅助函数：以时分秒打印日历时间
+ */
+void print_time_in_hms(time_t time)
+{
+    int hour = 0, minute = 0, second = time;
+
+    minute = second / 60, second %= 60;
+    hour = minute / 60, minute %= 60;
+
+    if (hour) printf("%d时", hour);
+    printf("%d分%d秒", minute, second);
+}
+
+void show_record(int game_count, struct record_struct *p_game_record)
+{
+    int i, count_of_victory = 0, count_of_defeat = 0, count_of_stop = 0;
+    time_t min_time, max_time;
+    max_time = min_time = p_game_record->time_of_use;
+
+    for (i = 0; i < game_count; ++i) {
+        /* 胜、中止记录*/
+        if (p_game_record[i].result == VICTORY) ++count_of_victory;
+        else if (p_game_record[i].result == 0) ++count_of_stop;
+
+        /* 最长、最短时间*/
+        if (p_game_record[i].time_of_use < min_time && p_game_record[i].result)
+            min_time = p_game_record[i].time_of_use;
+        if (p_game_record[i].time_of_use > max_time && p_game_record[i].result)
+            max_time = p_game_record[i].time_of_use;
+    }
+    count_of_defeat = game_count
+        - (count_of_victory + count_of_stop);
+
+    printf("%d胜%d负", count_of_victory, count_of_defeat);
+    if (count_of_stop) printf("%d中止", count_of_stop);
+    putchar('\n');
+
+    if (max_time != 0) {
+        printf("用时最长：");
+        print_time_in_hms(max_time);
+        putchar('\n');
+    }
+    if (min_time != 0) {
+        printf("用时最短：");
+        print_time_in_hms(min_time);
+        putchar('\n');
     }
 }
 
 /* 开始游戏*/
-int start_minesweeper(struct minefield_struct *p_minefield)
+void start_minesweeper(struct minefield_struct *p_minefield)
 {
-    /* signal -- -1 退出, 1 重开; judgement -- -1 负, 1 胜*/
-    int i, count = 1, signal = 0, judgement = 0;
+    /* signal -- -1 退出, 1 重开*/
+    int i, signal = 0, record_index;
     char content_of_input[BUFSIZ] = {0};
 
     allocate_minefield(p_minefield);
-    for (;; signal = judgement = 0) {
+    for (;; signal = 0) {
         setup_minefield(p_minefield);
 
-        printf("第%d局\n", count);
+        /* 为游戏记录分配/重分配空间*/
+        if (p_minefield->p_game_record == NULL) {
+            p_minefield->p_game_record =
+                (struct record_struct *)malloc(sizeof(struct record_struct));
+        } else {
+            p_minefield->p_game_record =
+                (struct record_struct *)realloc(p_minefield->p_game_record,
+                    sizeof(struct record_struct) * p_minefield->game_count);
+        }
+        record_index = p_minefield->game_count - 1;
+        p_minefield->p_game_record[record_index].result = 0;
+
+        printf("第%d局\n", p_minefield->game_count);
 
         /* 回合处理*/
-        for(;;) {
+        for(p_minefield->p_game_record[record_index].time_of_use = time(NULL);;) {
             display_minefield(p_minefield);
 
             /* 由stdin获取输入*/
@@ -612,32 +682,41 @@ int start_minesweeper(struct minefield_struct *p_minefield)
             signal = round_operation(content_of_input, p_minefield);
             if (signal) break;
 
-            if ((judgement = judge(p_minefield))) break;
+            if ((p_minefield->p_game_record[record_index].result
+                = judge(p_minefield))) {
+                p_minefield->p_game_record[record_index].time_of_use =
+                    time(NULL) - p_minefield->p_game_record[record_index].time_of_use;
+                break;
+            }
         }
 
         /* 终局处理*/
         if (signal != QUIT) {
-            if (judgement == VICTORY) { 
+            if (p_minefield->p_game_record[record_index].result == VICTORY) {
                 printf("\t\\(^_^)/\n");
+                printf("用时：%s\n", ctime(&(p_minefield->p_game_record[record_index].time_of_use)));
                 display_minefield(p_minefield);
-            } else if (judgement == DEFEAT) {
+            } else if (p_minefield->p_game_record[record_index].result == DEFEAT) {
                 printf("\t/(T-T)\\\n");
+                printf("用时：%s\n", ctime(&(p_minefield->p_game_record[record_index].time_of_use)));
                 display_minefield(p_minefield);
             }
 
             if (signal || comfirm("再来一局(y/n): ")) {
-                ++count;
+                ++p_minefield->game_count;
                 reset(p_minefield);
             } else {
+                show_record(p_minefield->game_count, p_minefield->p_game_record);
                 break;
             }
         } else {
+            show_record(p_minefield->game_count, p_minefield->p_game_record);
             break;
         }
     }
-    free_minefield(p_minefield);
 
-    return count;
+    free(p_minefield->p_game_record);
+    free_minefield(p_minefield);
 }
 
 /* 用法帮助*/
@@ -769,8 +848,9 @@ int mine_main(int argc, char *argv[])
     struct minefield_struct minefield = {
         9, 9, 10,
         NULL, NULL,
+        1,
         ENABLE,
-        {0, 0}
+        NULL
     };
 
     /* （显示帮助）返回值为1，退出*/
