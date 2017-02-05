@@ -8,5 +8,8 @@
 
 int mine_main(int argc, char *argv[]);
 
+/* 数独*/
+int sudoku_main(int argc, char *argv[]);
+
 #endif
 

@@ -27,14 +27,17 @@ debug: flag = -Wall -g
 debug: a.out
 
 ######
-a.out: main_d.o mine_d.o str_d.o
-	gcc main_d.o mine_d.o str_d.o
+a.out: main_d.o mine_d.o sudoku_d.o str_d.o
+	gcc main_d.o mine_d.o sudoku_d.o str_d.o
 
 main_d.o: main.c game.h str.h
 	gcc $(flag) -c main.c -o main_d.o
 
 mine_d.o: mine.c str.h
 	gcc $(flag) -c mine.c -o mine_d.o
+
+sudoku_d.o: sudoku.c str.h
+	gcc $(flag) -c sudoku.c -o sudoku_d.o
 
 str_d.o: str.c
 	gcc $(flag) -c str.c -o str_d.o
