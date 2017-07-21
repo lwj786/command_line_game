@@ -9,9 +9,11 @@
 
 #include "str.h"
 
+#define TIMEOUT 3000
+
 struct
 list_struct {
-    int list[9];    //用指针更好，但需内存管理
+    int list[9];
     int count;
 };
 
@@ -32,8 +34,8 @@ void display_table(int table[9][9])
 /* gen_sudoku_table() 生成数独表
  * 辅助函数：
  * copy_list() 列表复制
- * list_append() 元素增加
- * append_list() 成列表赋值（不重复）
+ * list_append() 列表（元素)增加
+ * append_list() 成列表增加（不重复）
  * has_value() 检查是否存在对应值
  * get_candidate_list() 获取候选列表
  * update_practical_constraint() 更新实践约束
@@ -145,11 +147,12 @@ void update_constraint(struct list_struct *constraint, int sudoku_table[9][9],
 
 }
 
-int gen_sudoku_table(int sudoku_table[9][9])
+int generate_sudoku_table(int sudoku_table[9][9])
 {
     /* 回退记录 成员 i, _j 记录位置 practical_constraint
      * 2 个记录可避免在某个节点的分支（即某位置有多候选值下连续取值）
      * 中有分支或有大于2个节点时出现反复
+     * （由于没有对分支节点做完整记录可能无法顺利生成）
      */
     struct back_record_struct {
         int i, j;
@@ -161,9 +164,12 @@ int gen_sudoku_table(int sudoku_table[9][9])
     int i, j, feature_row, feature_column;
     struct list_struct candidate, constraint;    //candidate 存储候选值，constraint 存储约束
 
+    clock_t start_time, end_time;
+
     srand(time(NULL));
     candidate.count = constraint.count = 0;
-    for (i = 0; i < 9; ++i)
+    start_time = clock();
+    for (i = 0; i < 9; ++i) {
         for (j = 0; j < 9; ++j, candidate.count = constraint.count = 0) {
             /* 约束更新 标准约束与实践约束*/
             feature_row = i / 3 * 3;
@@ -218,9 +224,27 @@ int gen_sudoku_table(int sudoku_table[9][9])
             get_candidate_list(&candidate, &constraint);
 
             sudoku_table[i][j] = candidate.list[rand() % candidate.count];
-        }
 
-    return 1;
+            end_time = clock();
+            if (end_time - start_time > TIMEOUT) return 1;
+        }
+    }
+
+    return 0;
+}
+
+int sudoku_gen(int sudoku_table[9][9])
+{
+    int i, j;
+
+    while (generate_sudoku_table(sudoku_table)) {
+        /* 重设*/
+        for (i = 0; i < 9; ++i)
+            for (j = 0; j < 9; ++j)
+                sudoku_table[i][j] = 0;
+    }
+
+    return 0;
 }
 
 /* 用法帮助*/
@@ -255,7 +279,7 @@ int sudoku_main(int argc, char *argv[])
 
     process_sudoku_argv(--argc, ++argv);
 
-    gen_sudoku_table(sudoku_table);
+    sudoku_gen(sudoku_table);
 
     display_table(sudoku_table);
 
