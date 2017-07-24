@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 
-#include "str.h"
+#include "publib.h"
 #include "game.h"
 
 #define GAMES_NUM 2

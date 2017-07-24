@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "str.h"
+#include "publib.h"
 
 #define MINE 1
 
@@ -37,35 +37,6 @@ minefield_struct {
     struct record_struct *p_game_record;
 };
 
-struct
-parameter_struct {
-    int count;
-    char **vector;
-};
-
-/* 确认 默认为否*/
-int comfirm(char *hint)
-{
-    int c;
-
-    printf("%s", hint);
-    if ((c = getchar()) == 'y') {
-        /* 清空缓冲区*/
-        while (getchar() != '\n')
-            ;
-
-        return 1;
-    } else {
-        /* 输入为'\n'时不必清空缓冲区*/
-        if (c != '\n') {
-            while (getchar() != '\n')
-                ;
-        }
-
-        return 0;
-    }
-}
-
 /* 释放雷区*/
 void free_minefield(struct minefield_struct *p_minefield)
 {
@@ -94,33 +65,6 @@ void allocate_minefield(struct minefield_struct *p_minefield)
     p_minefield->implicit = (int **)malloc(sizeof(int *) * p_minefield->width);
     for (i = 0; i < p_minefield->width; ++i)
         p_minefield->implicit[i] = (int *)malloc(sizeof(int) * p_minefield->length);
-}
-
-/* 由标准输入构造命令*/
-void structure_parameter(char *content_of_input, struct parameter_struct *p_parameter)
-{
-    int i, parameter_count;
-
-    /* 参数计数 分配空间*/
-    if (*content_of_input != ' ' && *content_of_input != 0) ++p_parameter->count;
-    for (i = 0; content_of_input[i] != 0; ++i) {
-        if (content_of_input[i] == ' '
-            && (content_of_input[i + 1] !=' ' && content_of_input[i + 1] != 0)
-            )
-            ++p_parameter->count;
-    }
-    p_parameter->vector = (char **)malloc(sizeof(char *) * p_parameter->count);
-
-    /* 构造参数向量*/
-    parameter_count = p_parameter->count;
-    for (--i; i >= 0; --i) {
-        if (content_of_input[i] == ' ')
-            content_of_input[i] = 0;
-        if (content_of_input[i] == 0 && content_of_input[i + 1] != 0)
-            p_parameter->vector[--parameter_count] = content_of_input + (i + 1);
-    }
-    if (*content_of_input != ' ' && *content_of_input != 0)
-        p_parameter->vector[0] = content_of_input;
 }
 
 /* 重设*/
@@ -181,8 +125,6 @@ int judge(struct minefield_struct *p_minefield)
  * 辅助函数：
  * operation_help() 操作帮助    comfirm_restart() 重开游戏    comfirm_quit() 退出游戏
  * detect_block() 探测          mark_block() 标记             remove_mark() 移除标记 
- * check_coordinate() 检查坐标  get_coordinate() 获取坐标     check_coordinate_format() 检查坐标格式
- *                              external call: str2num() -- str.h
  */
 int operation_help(int x, int y, struct minefield_struct *p_minefield)
 {
@@ -385,47 +327,6 @@ int remove_mark(int x, int y, struct minefield_struct *p_minefield)
     return 0;
 }
 
-int check_coordinate(int x, int y, int x_max, int y_max)
-{
-    if ((x < 0 || x > x_max)
-        || (y < 0 || y > y_max))
-        return 0;
-
-    return 1;
-}
-
-void get_coordinate(char *coordinate, int *p_x, int *p_y)
-{
-    int i;
-
-    for (i = 0; coordinate[i] != 0; ++i)
-        if (coordinate[i] == ',') break;
-
-    if (coordinate[i] == 0) {
-        *p_x = *p_y = str2num(coordinate);
-    } else {
-        coordinate[i] = 0;
-        *p_x = str2num(coordinate), *p_y = str2num(coordinate + i + 1);
-    }
-
-}
-
-int check_coordinate_format(char *coordinate)
-{
-    int i;
-
-    for (i = 0; coordinate[i] != 0; ++i) {
-        if (!(coordinate[i] >= '0' && coordinate[i] <= '9')
-            && coordinate[i] != ',')
-            return 0;
-        if (coordinate[i] == ','
-            && (i == 0 || coordinate[i + 1] == 0))
-            return 0;
-    }
-
-    return 1;
-}
-
 int round_operation(char *content_of_input, struct minefield_struct *p_minefield)
 {
     /* OPERATION_NUM 可进行操作的数目
@@ -462,7 +363,7 @@ int round_operation(char *content_of_input, struct minefield_struct *p_minefield
                 } else {
                     /* 将其后坐标参数进行相应操作*/
                     for (; ++i < parameter.count;)
-                        if (check_coordinate_format(parameter.vector[i])) {
+                        if (check_coordinate_format(parameter.vector[i], LOOSE)) {
                             get_coordinate(parameter.vector[i], &x, &y);
                             if (check_coordinate(x, y, p_minefield->length, p_minefield->width))
                                 (*operate[j])(x, y, p_minefield);
@@ -741,12 +642,12 @@ void mine_help(int argc, char *argv[])
 }
 
 /* process_argv() 参数处理
- * external call: cmp_str() -- str.h
+ * external call: cmp_str() -- publib.h
  * 辅助函数：
  * set_area() 设置面积
- * external call: str2num() -- str.h
+ * external call: str2num() -- publib.h
  * set_num_of_mines() 设置雷数，在参数内容为比率时，不设置（以防面积设置在后）而返回比率
- * external call: str2num() -- str.h
+ * external call: str2num() -- publib.h
  * check_arg_format() 检查参数格式 依据参数项对设定内容的参数格式检查 返回正否
  */
 void set_area(char *arg, struct minefield_struct *p_minefield)
