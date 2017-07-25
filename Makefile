@@ -8,17 +8,17 @@ install: clg
 	mv ./clg ~/bin/
 
 ######
-clg: main.o mine.o str.o
-	gcc main.o mine.o str.o -o clg
+clg: main.o mine.o publib.o
+	gcc main.o mine.o publib.o -o clg
 
-main.o: main.c game.h str.h
+main.o: main.c game.h publib.h
 	gcc -c main.c
 
-mine.o: mine.c str.h
+mine.o: mine.c publib.h
 	gcc -c mine.c
 
-str.o: str.c
-	gcc -c str.c
+publib.o: publib.c
+	gcc -c publib.c
 ######
 
 # 以debug模式编译生成可执行文件
@@ -27,17 +27,20 @@ debug: flag = -Wall -g
 debug: a.out
 
 ######
-a.out: main_d.o mine_d.o str_d.o
-	gcc main_d.o mine_d.o str_d.o
+a.out: main_d.o mine_d.o sudoku_d.o publib.d.o
+	gcc main_d.o mine_d.o sudoku_d.o publib.d.o
 
-main_d.o: main.c game.h str.h
+main_d.o: main.c game.h publib.h
 	gcc $(flag) -c main.c -o main_d.o
 
-mine_d.o: mine.c str.h
+mine_d.o: mine.c publib.h
 	gcc $(flag) -c mine.c -o mine_d.o
 
-str_d.o: str.c
-	gcc $(flag) -c str.c -o str_d.o
+sudoku_d.o: sudoku.c publib.h
+	gcc $(flag) -c sudoku.c -o sudoku_d.o
+
+publib.d.o: publib.c
+	gcc $(flag) -c publib.c -o publib.d.o
 ######
 
 # 清除
@@ -47,7 +50,7 @@ clean_ALL:
 
 .PHONY: clean_program
 clean_program:
-	rm -f main.o mine.o str.o clg
+	rm -f main.o mine.o publib.o clg
 
 .PHONY: clean_debug
 clean_debug:
