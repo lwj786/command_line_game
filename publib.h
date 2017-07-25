@@ -47,4 +47,10 @@ void get_coordinate(char *coordinate, int *p_x, int *p_y);
 #define LOOSE 1
 int check_coordinate_format(char *coordinate, int mode);
 
+/* allocate_array_2d() 分配二维数组空间
+ * free_array_2d() 释放空间
+ */
+int **allocate_array_2d(int m, int n);
+void free_array_2d(int **array_2d, int m);
+
 #endif

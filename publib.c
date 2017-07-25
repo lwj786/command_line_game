@@ -3,6 +3,7 @@
  * 日期：2016年 11月 27日 星期日 14:26:00 CST
  */
 
+#include <stdlib.h>
 #include "publib.h"
 
 /* 获取字符长度*/
@@ -190,4 +191,28 @@ int check_coordinate_format(char *coordinate, int mode)
     if ((! count) && mode == STRICT) return 0;
 
     return 1;
+}
+
+/* allocate_array_2d() 分配二维数组空间
+ * free_array_2d() 释放空间
+ */
+int **allocate_array_2d(int m, int n)
+{
+    int i, **array_2d;
+
+    array_2d = (int **)malloc(sizeof(int *) * m);
+    for (i = 0; i < m; ++i)
+        array_2d[i] = (int *)malloc(sizeof(int) * n);
+
+    return array_2d;
+}
+
+void free_array_2d(int **array_2d, int m)
+{
+    int i;
+
+    for (i = 0; i < m; ++i)
+        free(array_2d[i]);
+
+    free(array_2d);
 }
